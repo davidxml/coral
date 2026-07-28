@@ -65,25 +65,6 @@ A message comes in, gets vectorized against the same TF-IDF representation the m
 - **API:** FastAPI, with Pydantic enforcing strict request/response schemas
 - **Serving:** trained model and vectorizer are serialized and loaded once at startup, so inference stays low-latency
 
-## Project Structure
-
-```
-coral/
-├── data/
-│   └── sms_spam_collection.csv      # raw dataset
-├── training/
-│   ├── train.py                     # preprocessing + training pipeline
-│   └── evaluate.py                  # accuracy / F1 evaluation
-├── artifacts/
-│   ├── model.pkl                    # serialized classifier
-│   └── vectorizer.pkl               # serialized TF-IDF vectorizer
-├── app/
-│   ├── main.py                      # FastAPI app
-│   └── schemas.py                   # Pydantic request/response models
-├── requirements.txt
-└── README.md
-```
-
 ## Running Coral
 
 ```bash
