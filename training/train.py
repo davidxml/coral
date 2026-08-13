@@ -84,3 +84,5 @@ output_layer =  layers.Dense(1, activation = 'sigmoid')(x)
 
 model_1 = keras.Model(input_layer, output_layer, name = "Dense_Model")
 history_1 = compile_and_fit(model_1)
+
+model_1.save('spam_dense_model.keras')
