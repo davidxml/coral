@@ -14,7 +14,7 @@ from tensorflow.keras.layers import TextVectorization
 df = pd.read_csv("../data/SMSSpamCollection.csv", encoding = 'latin-1')
 
 # Cleans dataset 
-df = df.drop(['Unnamed: 2', 'Unnamed: 3', 'Unnamed;4'], axis = 1)
+df = df.drop(['Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4'], axis = 1)
 df = df.rename(columns={'v1': 'label', 'v2': 'Text'})
 
 # Label Encoding
