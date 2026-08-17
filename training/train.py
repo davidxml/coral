@@ -1,88 +1,55 @@
-import numpy as np
 import pandas as pd
-import seaborn as sns
-import tensorflow as tf
-
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-from tensorflow import keras
-from tensorflow.keras import layers
-from tensorflow.keras.layers import TextVectorization
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import accuracy_score, f1_score
+import joblib
+import os
 
+def train_model():
+    print("Loading dataset...")
+    df = pd.read_csv("../data/SMSSpamCollection.csv", encoding="latin-1")
+    
+    df = df[['v1', 'v2']]
+    df.columns = ['label', 'text']
 
-# Loads the dataset 
-df = pd.read_csv("../data/SMSSpamCollection.csv", encoding = 'latin-1')
-
-# Cleans dataset 
-df = df.drop(['Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4'], axis = 1)
-df = df.rename(columns={'v1': 'label', 'v2': 'Text'})
-
-# Label Encoding
-df['label_enc'] = df['label'].map({'ham': 0, 'spam': 1})
-
-# Split data and convert tpo NumPy arrays
-X_train, X_test, y_train, y_test = train_test_split(
-    df['Text'],
-    df['label_enc'],
-    test_size=0.2,
-    random_state=42
-)
-X_train_np = X_train.to_numpy()
-X_test_np  = X_test.to_numpy()
-y_train_np = y_train.to_numpy()
-y_test_np  = y_test.to_numpy()
-
-# Text statistics for vectorization
-avg_words_per_message = round(df['Text'].str.split().str.len().mean())
-total_unique_words = len(set(" ".join(df['Text']).split()))
-
-# helper functions for training and evaluation 
-def compile_and_fit(model, epochs=5):
-    model.compile(
-        optimizer= 'adam',
-        loss = 'binary_crossentropy',
-        metrics = ['accuracy']
-    )
-    history = model.fit(
-        X_train_np,
-        y_train_np,
-        epochs = epochs,
-        validation_data = (X_test_np, y_test_np)
+    print("Splitting data...")
+    X_train, X_test, y_train, y_test = train_test_split(
+        df['text'], 
+        df['label'], 
+        test_size=0.2, 
+        random_state=42  # This makes it reproducible
     )
 
-    return history
+    print("Vectorizing text (TF-IDF)...")
+    # TfidfVectorizer mathematically weighs the rarity and importance of each word
+    vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
+    X_train_vectorized = vectorizer.fit_transform(X_train)
+    X_test_vectorized = vectorizer.transform(X_test)
 
-def get_metrics(model, X, y):
-    y_preds = np.round(model.predict(X))
-    return {
-        'accuracy': accuracy_score(y, y_preds),
-        'precision': precision_score(y, y_preds),
-        'recall': recall_score(y, y_preds),
-        'f1-score': f1_score(y, y_preds),
-    }
+    print("Training Naive Bayes classifier...")
+    model = MultinomialNB()
+    model.fit(X_train_vectorized, y_train)
 
-# Text vectorization layer
-text_vec  = TextVectorization(
-    max_tokens = total_unique_words,
-    standardize = 'lower_and_strip_punctuation',
-    output_sequence_length = avg_words_per_message
-)
+    print("Evaluating model...")
+    predictions = model.predict(X_test_vectorized)
+    
+    # Calculate metrics
+    accuracy = accuracy_score(y_test, predictions)
+    # F1 score requires us to specify which label is the "positive" class (spam)
+    f1 = f1_score(y_test, predictions, pos_label='spam')
 
-text_vec.adapt(X_train_np)
+    print("-" * 30)
+    print(f"Accuracy: {accuracy * 100:.2f}%")
+    print(f"F1 Score: {f1 * 100:.2f}%")
+    print("-" * 30)
 
-"""
-Model 1 
-Dense embedding model
-(Build and Train)
-"""
-input_layer = layers.Input(shape=(1,), dtype=tf.string)
-x = text_vec(input_layer)
-x = layers.Embedding(input_dim = total_unique_words, output_dim= 128)(x)
-x = layers.GlobalAveragePooling1D()(x)
-x = layers.Dense(32, activation= 'relu')(x)
-output_layer =  layers.Dense(1, activation = 'sigmoid')(x)
+    print("Exporting artifacts...")
+    # Save the trained vectorizer and model to disk so FastAPI can load them
+    os.makedirs("models", exist_ok=True)
+    joblib.dump(vectorizer, "models/tfidf_vectorizer.joblib")
+    joblib.dump(model, "models/naive_bayes_model.joblib")
+    print("Done! Artifacts saved to the /models directory.")
 
-model_1 = keras.Model(input_layer, output_layer, name = "Dense_Model")
-history_1 = compile_and_fit(model_1)
-
-model_1.save('spam_dense_model.keras')
+if __name__ == "__main__":
+    train_model()
