@@ -1,4 +1,6 @@
 import contextlib
+import tensorflow as tf
+
 from fastapi import FastAPI, Request, HTTPException
 from tensorflow import keras
 
@@ -40,7 +42,8 @@ async def classify(features: MessagePayload, request: Request):
 
     # Wrap the text in a list to satisfy TensorFlow's batch requirement
     # Use verbose=0 to prevent terminal spam on every request
-    prediction_array = model.predict([raw_text], verbose=0)
+    tensor_input = tf.constant([raw_text])
+    prediction_array = model.predict(tensor_input, verbose=0)
     
     # Extract the actual float value from the nested matrix output
     probability = float(prediction_array[0][0])
