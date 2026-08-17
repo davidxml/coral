@@ -1,38 +1,54 @@
 import contextlib
-
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List
+from fastapi import FastAPI, Request, HTTPException
 from tensorflow import keras
 
-class MessagePayload(BaseModel):
-    message: str      # The client is exxpected to send a single message
+from schemas import MessagePayload
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-
-    global ml_model
-
+    # Initialize the state variable safely
+    app.state.ml_model = None
+    
     try:
-        with open('../training/spam_dense_model.keras', 'rb') as file:
-            ml_model = keras.model.load_model(file)
-
-    except FileNotFoundError:
-        print('Model file not present at location')
+        # Passes the string path directly
+        app.state.ml_model = keras.models.load_model('../training/spam_dense_model.keras')
+        print("Model loaded successfully.")
+    except Exception as e:
+        print(f"Failed to load model: {e}")
 
     yield 
+    # Clean up memory on shutdown
+    app.state.ml_model = None
 
 app = FastAPI(
-    title = 'Spam Classifier',
-    description = 'A Micro-service for text classification into "ham" or "Spam" ',
-    version = '1.0.0',
-    lifespan = lifespan
+    title='Spam Classifier',
+    description='A Micro-service for text classification into "ham" or "spam"',
+    version='1.0.0',
+    lifespan=lifespan
 )
-@app.post('/predict', response_model=str)
-def classify(Features: MessagePayload):
-    if ml_model is None:
-        return {'error': 'model not found '}
-    
-    data =  MessagePayload.message
 
-    prediction = ml_model.predict()
+@app.post('/predict')
+async def classify(features: MessagePayload, request: Request):
+    # Safely extract the model from the app state
+    model = request.app.state.ml_model
+    
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model engine is unavailable.")
+    
+    # Extract the string from the instance, not the class
+    raw_text = features.message
+
+    # Wrap the text in a list to satisfy TensorFlow's batch requirement
+    # Use verbose=0 to prevent terminal spam on every request
+    prediction_array = model.predict([raw_text], verbose=0)
+    
+    # Extract the actual float value from the nested matrix output
+    probability = float(prediction_array[0][0])
+    label = "spam" if probability > 0.5 else "ham"
+
+    # Return a clean JSON structure
+    return {
+        "text": raw_text,
+        "label": label,
+        "probability": probability
+    }
