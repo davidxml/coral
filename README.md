@@ -28,7 +28,7 @@ Real-time text classification microservice that combines FastAPI with machine le
 
 Every message that hits the endpoint gets scored in milliseconds, so the platform can filter malicious links and spam before they ever reach a user's inbox, with no manual review, no delay, and no gap for bad actors to slip through.
 
-## Why It Matters
+## Background
 
 Spam and phishing links are a moving target, with new campaigns, new domains, and new tricks appearing all day long. Coral doesn't try to keep a blocklist current; it learns the *language* of spam instead. That means it catches variations a static filter would miss, while staying fast and cheap enough to sit in the critical path of every message sent on the platform.
 
@@ -36,7 +36,7 @@ At the target accuracy and F1 thresholds, Coral is built to catch the overwhelmi
 
 ## How It Works
 
-A message comes in, gets vectorized against the same TF-IDF representation the model was trained on, and is scored by the classifier. The response carries both a label and a confidence score, so downstream systems can decide how aggressively to act: auto-block above a threshold, flag for review below it.
+Incoming text gets vectorized (same TF-IDF representation used during training) and passed to the classifier. The response includes both the predicted label and a confidence score, so whatever's calling the API can decide how to act. it auto-block above some threshold, flag for review below it.
 
 ```json
 // Request
@@ -58,14 +58,14 @@ A message comes in, gets vectorized against the same TF-IDF representation the m
 | Accuracy | ≥ 97% |
 | F1-score | ≥ 95% |
 
-## Under the Hood
+## Stack
 
 - **Model:** Naive Bayes / Logistic Regression, trained via Scikit-Learn on the SMS Spam Collection dataset
 - **Features:** TF-IDF vectorization of message text
 - **API:** FastAPI, with Pydantic enforcing strict request/response schemas
 - **Serving:** trained model and vectorizer are serialized and loaded once at startup, so inference stays low-latency
 
-## Running Coral
+## Coral Setup
 
 ```bash
 pip install -r requirements.txt
@@ -73,6 +73,7 @@ python training/train.py        # trains and serializes the model
 uvicorn app.main:app --reload   # starts the API
 ```
 
+Quick Test
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
