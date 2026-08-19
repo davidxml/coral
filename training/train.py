@@ -22,7 +22,6 @@ def train_model():
     )
 
     print("Vectorizing text (TF-IDF)...")
-    # TfidfVectorizer mathematically weighs the rarity and importance of each word
     vectorizer = TfidfVectorizer(stop_words='english', max_features=5000)
     X_train_vectorized = vectorizer.fit_transform(X_train)
     X_test_vectorized = vectorizer.transform(X_test)
@@ -36,7 +35,6 @@ def train_model():
     
     # Calculate metrics
     accuracy = accuracy_score(y_test, predictions)
-    # F1 score requires us to specify which label is the "positive" class (spam)
     f1 = f1_score(y_test, predictions, pos_label='spam')
 
     print("-" * 30)
@@ -44,12 +42,12 @@ def train_model():
     print(f"F1 Score: {f1 * 100:.2f}%")
     print("-" * 30)
 
-    print("Exporting artifacts...")
-    # Save the trained vectorizer and model to disk so FastAPI can load them
+    print("Exporting Model...")
+    # Saves the trained vectorizer and model to disk
     os.makedirs("models", exist_ok=True)
-    joblib.dump(vectorizer, "models/tfidf_vectorizer.joblib")
-    joblib.dump(model, "models/naive_bayes_model.joblib")
-    print("Done! Artifacts saved to the /models directory.")
+    joblib.dump(vectorizer, "../artifacts/models/tfidf_vectorizer.joblib")
+    joblib.dump(model, "../artifacts/models/naive_bayes_model.joblib")
+    print("Models saved to the artifacts directory.")
 
 if __name__ == "__main__":
     train_model()
