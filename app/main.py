@@ -38,7 +38,8 @@ async def lifespan():
 app = FastAPI(
     title="CORAL Spam Detection API",
     description="Real-time text classification microservice for spam detection.",
-    version="2.0.0"
+    version="2.0.0",
+    lifespan = lifespan,
 )
 
 class PredictionRequest(BaseModel):
