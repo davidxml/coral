@@ -1,57 +1,85 @@
-import contextlib
-import tensorflow as tf
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from contextlib import asynccontextmanager
+import joblib
+import os
 
-from fastapi import FastAPI, Request, HTTPException
-from tensorflow import keras
+vectorizer = None
+model = None
 
-from schemas import MessagePayload
+@asynccontextmanager
+async def lifespan():
+    """
+    Executes once when Uvicorn boots up. Loads the Scikit-Learn artifacts
+    from disk into memory so inference is instantaneous.
+    """
+    global vectorizer, model
 
-@contextlib.asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Initialize the state variable safely
-    app.state.ml_model = None
-    
-    try:
-        # Passes the string path directly
-        app.state.ml_model = keras.models.load_model('../training/spam_dense_model.keras')
-        print("Model loaded successfully.")
-    except Exception as e:
-        print(f"Failed to load model: {e}")
+    # Resolve paths relative to where Uvicorn is executed
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    vectorizer_path = os.path.join(base_dir, "models", "tfidf_vectorizer.joblib")
+    model_path = os.path.join(base_dir, "models", "naive_bayes_model.joblib")
+
+    if not os.path.exists(vectorizer_path) or not os.path.exists(model_path):
+        raise RuntimeError(
+            "Machine learning artifacts not found in the /models directory. "
+            "Please run `python train.py` to generate them before starting the server."
+        )
+
+    vectorizer = joblib.load(vectorizer_path)
+    model = joblib.load(model_path)
+    print("CORAL Engine: Scikit-Learn artifacts loaded into memory.")
 
     yield 
-    # Clean up memory on shutdown
-    app.state.ml_model = None
+
+    vectorizer = None
+    model = None
 
 app = FastAPI(
-    title='Spam Classifier',
-    description='A Micro-service for text classification into "ham" or "spam"',
-    version='1.0.0',
-    lifespan=lifespan
+    title="CORAL Spam Detection API",
+    description="Real-time text classification microservice for spam detection.",
+    version="2.0.0"
 )
 
-@app.post('/predict')
-async def classify(features: MessagePayload, request: Request):
-    # Safely extract the model from the app state
-    model = request.app.state.ml_model
-    
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model engine is unavailable.")
-    
-    # Extract the string from the instance, not the class
-    raw_text = features.message
+class PredictionRequest(BaseModel):
+    # The README spec mandates the key 'text'
+    text: str = Field(..., example="Congratulations! You've won a free $1,000 gift card. Click here.")
 
-    # Wrap the text in a list to satisfy TensorFlow's batch requirement
-    # Use verbose=0 to prevent terminal spam on every request
-    tensor_input = tf.constant([raw_text])
-    prediction_array = model.predict(tensor_input, verbose=0)
-    
-    # Extract the actual float value from the nested matrix output
-    probability = float(prediction_array[0][0])
-    label = "spam" if probability > 0.5 else "ham"
+class PredictionResponse(BaseModel):
+    prediction: str
+    confidence_score: float
 
-    # Return a clean JSON structure
-    return {
-        "text": raw_text,
-        "label": label,
-        "probability": probability
-    }
+@app.post("/predict", response_model=PredictionResponse)
+async def classify_text(payload: PredictionRequest):
+    """
+    Receives text, vectorizes it, and returns the Naive Bayes probability prediction.
+    """
+    if model is None or vectorizer is None:
+        raise HTTPException(status_code=503, detail="Machine learning model is not loaded.")
+
+    try:
+        # 1. Transform the raw English text into the TF-IDF statistical matrix
+        # (Must pass as a list because the vectorizer expects an iterable of documents)
+        text_matrix = vectorizer.transform([payload.text])
+
+        # 2. Extract the categorical prediction ('ham' or 'spam')
+        predicted_label = model.predict(text_matrix)[0]
+
+        # 3. Extract the raw statistical probability (confidence score)
+        # predict_proba returns a 2D array: [[prob_class_0, prob_class_1]]
+        probability_array = model.predict_proba(text_matrix)[0]
+
+        # Scikit-Learn orders classes alphabetically: 'ham' is index 0, 'spam' is index 1.
+        # We grab the probability corresponding to the predicted label.
+        confidence_idx = 1 if predicted_label == 'spam' else 0
+        confidence_score = float(probability_array[confidence_idx])
+
+        # 4. Return the exact JSON schema defined in the README
+        return PredictionResponse(
+            prediction=predicted_label,
+            confidence_score=round(confidence_score, 4)
+        )
+
+    except Exception as e:
+        # If the math engine crashes, return a clean 500 error, not a stack trace to the user.
+        raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")  
