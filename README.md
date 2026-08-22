@@ -47,7 +47,7 @@ Incoming text gets vectorized (same TF-IDF representation used during training) 
 // Response
 {
   "prediction": "spam",
-  "confidence_score": 0.98
+  "confidence_score": 0.94
 }
 ```
 
@@ -55,8 +55,8 @@ Incoming text gets vectorized (same TF-IDF representation used during training) 
 
 | Metric | Target |
 |---|---|
-| Accuracy | ≥ 97% |
-| F1-score | ≥ 95% |
+| Accuracy | ≥ 98% |
+| F1-score | ≥ 93% |
 
 ## Stack
 
