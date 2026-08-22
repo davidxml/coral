@@ -5,6 +5,8 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 import joblib
 import os
+import numpy as np
+import json
 
 def train_model():
     print("Loading dataset...")
@@ -31,9 +33,9 @@ def train_model():
     model.fit(X_train_vectorized, y_train)
 
     print("Evaluating model...")
-    predictions = model.predict(X_test_vectorized)
-    
-    # Calculate metrics
+    THRESHOLD = 0.20
+    probabilities = model.predict_proba(X_test_vectorized)[:, 1]
+    predictions = np.where(probabilities >= THRESHOLD, 'spam', 'ham')
     accuracy = accuracy_score(y_test, predictions)
     f1 = f1_score(y_test, predictions, pos_label='spam')
 
@@ -42,6 +44,12 @@ def train_model():
     print(f"F1 Score: {f1 * 100:.2f}%")
     print("-" * 30)
 
+    # Model Reports
+    print("Classification Report:")
+    print(classification_report(y_test, predictions))
+    print("Confusion Matrix:")
+    print(confusion_matrix(y_test, predictions))
+
     print("Exporting Model...")
     # Saves the trained vectorizer and model to disk
     os.makedirs("models", exist_ok=True)
@@ -49,13 +57,8 @@ def train_model():
     joblib.dump(model, "../artifacts/models/naive_bayes_model.joblib")
     print("Models saved to the artifacts directory.")
 
-    print("Classification Report:")
-    print(classification_report(y_test, predictions))
-
-    print("Confusion Matrix:")
-    print(confusion_matrix(y_test, predictions))
-
-    threshold = np.range
+    with open("../artifacts/models/threshold.json", "w") as f:
+        json.dump({"Threshold":THRESHOLD}, f)
 
 if __name__ == "__main__":
     train_model()

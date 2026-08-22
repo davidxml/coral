@@ -3,37 +3,45 @@ from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
 import joblib
 import os
+import json
 
 vectorizer = None
 model = None
+THRESHOLD = None
 
 @asynccontextmanager
-def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):
     """
     Executes once when Uvicorn boots up. Loads the Scikit-Learn artifacts
     from disk into memory so inference is instantaneous.
     """
-    global vectorizer, model
+    global vectorizer, model, THRESHOLD
 
     # Resolve paths relative to where Uvicorn is executed
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     vectorizer_path = os.path.join(base_dir, "artifacts", "models", "tfidf_vectorizer.joblib")
     model_path = os.path.join(base_dir, "artifacts", "models", "naive_bayes_model.joblib")
-
-    if not os.path.exists(vectorizer_path) or not os.path.exists(model_path):
+    threshold_path = os.path.join(base_dir, "artifacts", "models", "threshold.json")
+                                   
+    if not os.path.exists(vectorizer_path) or not os.path.exists(model_path) or not os.path.exists(threshold_path): 
         raise RuntimeError(
             "Machine learning artifacts not found in the /models directory. "
             "Please run `python train.py` to generate them before starting the server."
         )
 
+    with open(threshold_path) as f:
+        threshold = json.load(f)["threshold"]
+
     vectorizer = joblib.load(vectorizer_path)
     model = joblib.load(model_path)
+    THRESHOLD = threshold 
     print("CORAL Engine: Scikit-Learn artifacts loaded into memory.")
 
     yield 
     
     vectorizer = None
     model = None
+    THRESHOLD = None
 
 app = FastAPI(
     title="CORAL Spam Detection API",
@@ -64,14 +72,14 @@ def classify_text(payload: PredictionRequest):
         text_matrix = vectorizer.transform([payload.text])
 
         # 2. Extract the categorical prediction ('ham' or 'spam')
-        predicted_label = model.predict(text_matrix)[0]
-
+    
         # 3. Extract the raw statistical probability (confidence score)
         # predict_proba returns a 2D array: [[prob_class_0, prob_class_1]]
         probability_array = model.predict_proba(text_matrix)[0]
 
         # Scikit-Learn orders classes alphabetically: 'ham' is index 0, 'spam' is index 1.
         # We grab the probability corresponding to the predicted label.
+        predicted_label = "spam" if probability_array[1] >= THRESHOLD else "ham"
         confidence_idx = 1 if predicted_label == 'spam' else 0
         confidence_score = float(probability_array[confidence_idx])
 
