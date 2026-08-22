@@ -8,7 +8,7 @@ vectorizer = None
 model = None
 
 @asynccontextmanager
-async def lifespan():
+async def lifespan(app: FastAPI):
     """
     Executes once when Uvicorn boots up. Loads the Scikit-Learn artifacts
     from disk into memory so inference is instantaneous.
@@ -17,8 +17,8 @@ async def lifespan():
 
     # Resolve paths relative to where Uvicorn is executed
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    vectorizer_path = os.path.join(base_dir, "models", "tfidf_vectorizer.joblib")
-    model_path = os.path.join(base_dir, "models", "naive_bayes_model.joblib")
+    vectorizer_path = os.path.join(base_dir, "artifacts", "models", "tfidf_vectorizer.joblib")
+    model_path = os.path.join(base_dir, "artifacts", "models", "naive_bayes_model.joblib")
 
     if not os.path.exists(vectorizer_path) or not os.path.exists(model_path):
         raise RuntimeError(
@@ -31,7 +31,7 @@ async def lifespan():
     print("CORAL Engine: Scikit-Learn artifacts loaded into memory.")
 
     yield 
-
+    
     vectorizer = None
     model = None
 
