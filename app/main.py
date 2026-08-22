@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
+from app.schemas import PredictionRequest, PredictionResponse
 import joblib
 import os
 import json
@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
         )
 
     with open(threshold_path) as f:
-        threshold = json.load(f)["threshold"]
+        threshold = json.load(f)["Threshold"]
 
     vectorizer = joblib.load(vectorizer_path)
     model = joblib.load(model_path)
@@ -44,19 +44,12 @@ async def lifespan(app: FastAPI):
     THRESHOLD = None
 
 app = FastAPI(
-    title="CORAL Spam Detection API",
+    title="CORAL",
     description="Real-time text classification microservice for spam detection.",
     version="2.0.0",
     lifespan = lifespan,
 )
 
-class PredictionRequest(BaseModel):
-    # The README spec mandates the key 'text'
-    text: str = Field(..., example="Congratulations! You've won a free $1,000 gift card. Click here.")
-
-class PredictionResponse(BaseModel):
-    prediction: str
-    confidence_score: float
 
 @app.post("/predict", response_model=PredictionResponse)
 def classify_text(payload: PredictionRequest):
