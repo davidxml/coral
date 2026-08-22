@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 import joblib
 import os
 
@@ -48,6 +48,14 @@ def train_model():
     joblib.dump(vectorizer, "../artifacts/models/tfidf_vectorizer.joblib")
     joblib.dump(model, "../artifacts/models/naive_bayes_model.joblib")
     print("Models saved to the artifacts directory.")
+
+    print("Classification Report:")
+    print(classification_report(y_test, predictions))
+
+    print("Confusion Matrix:")
+    print(confusion_matrix(y_test, predictions))
+
+    threshold = np.range
 
 if __name__ == "__main__":
     train_model()
