@@ -8,7 +8,7 @@ vectorizer = None
 model = None
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+def lifespan(app: FastAPI):
     """
     Executes once when Uvicorn boots up. Loads the Scikit-Learn artifacts
     from disk into memory so inference is instantaneous.
@@ -51,7 +51,7 @@ class PredictionResponse(BaseModel):
     confidence_score: float
 
 @app.post("/predict", response_model=PredictionResponse)
-async def classify_text(payload: PredictionRequest):
+def classify_text(payload: PredictionRequest):
     """
     Receives text, vectorizes it, and returns the Naive Bayes probability prediction.
     """
