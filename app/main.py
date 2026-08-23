@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 from app.schemas import PredictionRequest, PredictionResponse
-import app.preprocess
+from app.preprocess import normalize_text
 import joblib
 import os
 import json
@@ -74,7 +74,8 @@ def classify_text(payload: PredictionRequest):
         raise HTTPException(status_code=503, detail="Machine learning model is not loaded.")
 
     try:
-        text_matrix = vectorizer.transform([payload.text])
+        normalized_text = normalize_text(payload.text)
+        text_matrix = vectorizer.transform([normalized_text])
 
         # 2. Get P(spam) directly - this IS the unified spam score
         probability_array = model.predict_proba(text_matrix)[0]
