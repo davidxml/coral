@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import json
 import os
-import app.preprocess
+from app.preprocess import normalize_text
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -41,9 +41,11 @@ def find_best_threshold(y_true, probabilities, thresholds=None):
 
 def train_model():
     print("Loading dataset...")
-    df = pd.read_csv("../data/SMSSpamCollection.csv", encoding="latin-1")
+    df = pd.read_csv("data/SMSSpamCollection.csv", encoding="latin-1")
     df = df[["v1", "v2"]]
     df.columns = ["label", "text"]
+
+    df["text"] = df["text"].apply(normalize_text)
 
     print("Splitting data...")
     X_train, X_test, y_train, y_test = train_test_split(
@@ -103,11 +105,11 @@ def train_model():
     print(classification_report(y_test, final_preds))
 
     print("Exporting model artifacts...")
-    os.makedirs("../artifacts/models", exist_ok=True)
-    joblib.dump(vectorizer, "../artifacts/models/tfidf_vectorizer.joblib")
-    joblib.dump(model, "../artifacts/models/logistic_regression_model.joblib")
+    os.makedirs("artifacts/models", exist_ok=True)
+    joblib.dump(vectorizer, "artifacts/models/tfidf_vectorizer.joblib")
+    joblib.dump(model, "artifacts/models/logistic_regression_model.joblib")
 
-    with open("../artifacts/models/threshold.json", "w") as f:
+    with open("artifacts/models/threshold.json", "w") as f:
         json.dump(
             {
                 "threshold": float(best_threshold),
