@@ -11,6 +11,16 @@ class PredictionRequest(BaseModel):
         return value
     
 class PredictionResponse(BaseModel):
-    prediction: str
-    confidence_score: float
+    prediction: str = Field(
+        ..., 
+        description="The classification label, either 'spam' or 'ham'."
+    )
+    spam_score: float = Field(
+        ..., 
+        description="The statistical probability (0.0 to 1.0) that the message is spam."
+    )
+    threshold_used: float = Field(
+        ...,
+        description="The optimized probability threshold used to determine the final prediction."
+    )
 
