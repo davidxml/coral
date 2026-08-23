@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 from app.schemas import PredictionRequest, PredictionResponse
+import app.preprocess
 import joblib
 import os
 import json
@@ -8,6 +9,8 @@ import json
 vectorizer = None
 model = None
 THRESHOLD = None
+SPAM_CLASS_INDEX = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -15,73 +18,76 @@ async def lifespan(app: FastAPI):
     Executes once when Uvicorn boots up. Loads the Scikit-Learn artifacts
     from disk into memory so inference is instantaneous.
     """
-    global vectorizer, model, THRESHOLD
+    global vectorizer, model, THRESHOLD, SPAM_CLASS_INDEX
 
-    # Resolve paths relative to where Uvicorn is executed
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     vectorizer_path = os.path.join(base_dir, "artifacts", "models", "tfidf_vectorizer.joblib")
-    model_path = os.path.join(base_dir, "artifacts", "models", "naive_bayes_model.joblib")
+    model_path = os.path.join(base_dir, "artifacts", "models", "logistic_regression_model.joblib")
     threshold_path = os.path.join(base_dir, "artifacts", "models", "threshold.json")
-                                   
-    if not os.path.exists(vectorizer_path) or not os.path.exists(model_path) or not os.path.exists(threshold_path): 
+
+    if not os.path.exists(vectorizer_path) or not os.path.exists(model_path) or not os.path.exists(threshold_path):
         raise RuntimeError(
             "Machine learning artifacts not found in the /models directory. "
             "Please run `python train.py` to generate them before starting the server."
         )
 
-    with open(threshold_path) as f:
-        threshold = json.load(f)["Threshold"]
-
     vectorizer = joblib.load(vectorizer_path)
     model = joblib.load(model_path)
-    THRESHOLD = threshold 
-    print("CORAL Engine: Scikit-Learn artifacts loaded into memory.")
 
-    yield 
-    
+    with open(threshold_path) as f:
+        threshold_data = json.load(f)
+        THRESHOLD = threshold_data["threshold"]
+        SPAM_CLASS_INDEX = threshold_data["spam_class_index"]
+
+    print("CORAL Engine: Scikit-Learn artifacts loaded into memory.")
+    print(f"CORAL Engine: Using threshold={THRESHOLD}, spam_class_index={SPAM_CLASS_INDEX}")
+
+    yield
     vectorizer = None
     model = None
     THRESHOLD = None
+    SPAM_CLASS_INDEX = None
+
 
 app = FastAPI(
-    title="CORAL",
+    title="CORAL Spam Detection API",
     description="Real-time text classification microservice for spam detection.",
-    version="2.0.0",
-    lifespan = lifespan,
+    version="3.0.0",
+    lifespan=lifespan,
 )
+
+@app.get("/health")
+def health_check():
+    if model is None or vectorizer is None:
+        raise HTTPException(status_code=503, detail="Machine learning model is not loaded.")
+    return {"status": "ok"}
 
 
 @app.post("/predict", response_model=PredictionResponse)
 def classify_text(payload: PredictionRequest):
     """
-    Receives text, vectorizes it, and returns the Naive Bayes probability prediction.
+    Receives text, vectorizes it, and returns a unified spam score
+    (0 = confidently ham, 1 = confidently spam) plus a label derived
+    from the current decision threshold.
     """
     if model is None or vectorizer is None:
         raise HTTPException(status_code=503, detail="Machine learning model is not loaded.")
 
     try:
-        # 1. Transform the raw English text into the TF-IDF statistical matrix
-        # (Must pass as a list because the vectorizer expects an iterable of documents)
         text_matrix = vectorizer.transform([payload.text])
 
-        # 2. Extract the categorical prediction ('ham' or 'spam')
-    
-        # 3. Extract the raw statistical probability (confidence score)
-        # predict_proba returns a 2D array: [[prob_class_0, prob_class_1]]
+        # 2. Get P(spam) directly - this IS the unified spam score
         probability_array = model.predict_proba(text_matrix)[0]
+        spam_score = float(probability_array[SPAM_CLASS_INDEX])
 
-        # Scikit-Learn orders classes alphabetically: 'ham' is index 0, 'spam' is index 1.
-        # We grab the probability corresponding to the predicted label.
-        predicted_label = "spam" if probability_array[1] >= THRESHOLD else "ham"
-        confidence_idx = 1 if predicted_label == 'spam' else 0
-        confidence_score = float(probability_array[confidence_idx])
+        # 3. Derive the label using the tuned threshold
+        predicted_label = "spam" if spam_score >= THRESHOLD else "ham"
 
-        # 4. Return the exact JSON schema defined in the README
         return PredictionResponse(
             prediction=predicted_label,
-            confidence_score=round(confidence_score, 4)
+            spam_score=round(spam_score, 4),
+            threshold_used=THRESHOLD,
         )
 
     except Exception as e:
-        # If the math engine crashes, return a clean 500 error, not a stack trace to the user.
-        raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")  
+        raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")
