@@ -1,54 +1,94 @@
-import contextlib
-from fastapi import FastAPI, Request, HTTPException
-from tensorflow import keras
+from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from app.schemas import PredictionRequest, PredictionResponse
+from app.preprocess import normalize_text
+import joblib
+import os
+import json
 
-from schemas import MessagePayload
+vectorizer = None
+model = None
+THRESHOLD = None
+SPAM_CLASS_INDEX = None
 
-@contextlib.asynccontextmanager
+
+@asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize the state variable safely
-    app.state.ml_model = None
-    
-    try:
-        # Passes the string path directly
-        app.state.ml_model = keras.models.load_model('../training/spam_dense_model.keras')
-        print("Model loaded successfully.")
-    except Exception as e:
-        print(f"Failed to load model: {e}")
+    """
+    Executes once when Uvicorn boots up. Loads the Scikit-Learn artifacts
+    from disk into memory so inference is instantaneous.
+    """
+    global vectorizer, model, THRESHOLD, SPAM_CLASS_INDEX
 
-    yield 
-    # Clean up memory on shutdown
-    app.state.ml_model = None
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    vectorizer_path = os.path.join(base_dir, "artifacts", "models", "tfidf_vectorizer.joblib")
+    model_path = os.path.join(base_dir, "artifacts", "models", "logistic_regression_model.joblib")
+    threshold_path = os.path.join(base_dir, "artifacts", "models", "threshold.json")
+
+    if not os.path.exists(vectorizer_path) or not os.path.exists(model_path) or not os.path.exists(threshold_path):
+        raise RuntimeError(
+            "Machine learning artifacts not found in the /models directory. "
+            "Please run `python train.py` to generate them before starting the server."
+        )
+
+    vectorizer = joblib.load(vectorizer_path)
+    model = joblib.load(model_path)
+
+    with open(threshold_path) as f:
+        threshold_data = json.load(f)
+        THRESHOLD = threshold_data["threshold"]
+        SPAM_CLASS_INDEX = threshold_data["spam_class_index"]
+
+    print("CORAL Engine: Scikit-Learn artifacts loaded into memory.")
+    print(f"CORAL Engine: Using threshold={THRESHOLD}, spam_class_index={SPAM_CLASS_INDEX}")
+
+    yield
+    vectorizer = None
+    model = None
+    THRESHOLD = None
+    SPAM_CLASS_INDEX = None
+
 
 app = FastAPI(
-    title='Spam Classifier',
-    description='A Micro-service for text classification into "ham" or "spam"',
-    version='1.0.0',
-    lifespan=lifespan
+    title="CORAL Spam Detection API",
+    description="Real-time text classification microservice for spam detection.",
+    version="3.0.0",
+    lifespan=lifespan,
 )
 
-@app.post('/predict')
-async def classify(features: MessagePayload, request: Request):
-    # Safely extract the model from the app state
-    model = request.app.state.ml_model
-    
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model engine is unavailable.")
-    
-    # Extract the string from the instance, not the class
-    raw_text = features.message
+@app.get("/health")
+def health_check():
+    if model is None or vectorizer is None:
+        raise HTTPException(status_code=503, detail="Machine learning model is not loaded.")
+    return {"status": "ok"}
 
-    # Wrap the text in a list to satisfy TensorFlow's batch requirement
-    # Use verbose=0 to prevent terminal spam on every request
-    prediction_array = model.predict([raw_text], verbose=0)
-    
-    # Extract the actual float value from the nested matrix output
-    probability = float(prediction_array[0][0])
-    label = "spam" if probability > 0.5 else "ham"
 
-    # Return a clean JSON structure
-    return {
-        "text": raw_text,
-        "label": label,
-        "probability": probability
-    }
+@app.post("/predict", response_model=PredictionResponse)
+def classify_text(payload: PredictionRequest):
+    """
+    Receives text, vectorizes it, and returns a unified spam score
+    (0 = confidently ham, 1 = confidently spam) plus a label derived
+    from the current decision threshold.
+    """
+    if model is None or vectorizer is None:
+        raise HTTPException(status_code=503, detail="Machine learning model is not loaded.")
+
+    try:
+        normalized_text = normalize_text(payload.text)
+        text_matrix = vectorizer.transform([normalized_text])
+
+        # 2. Get P(spam) directly - this IS the unified spam score
+        probability_array = model.predict_proba(text_matrix)[0]
+        spam_score = float(probability_array[SPAM_CLASS_INDEX])
+
+        # 3. Derive the label using the tuned threshold
+        predicted_label = "spam" if spam_score >= THRESHOLD else "ham"
+
+        return PredictionResponse(
+            prediction=predicted_label,
+            spam_score=round(spam_score, 4),
+            threshold_used=THRESHOLD,
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")

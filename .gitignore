@@ -16,3 +16,4 @@ env/
 *.keras
 *.h5
 *.pb
+*.joblib
