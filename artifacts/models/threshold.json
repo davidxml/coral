@@ -1,1 +1,8 @@
-{"Threshold": 0.2}
+{
+  "threshold": 0.43000000000000005,
+  "spam_class_index": 1,
+  "model_classes": [
+    "ham",
+    "spam"
+  ]
+}
