@@ -17,3 +17,7 @@ env/
 *.h5
 *.pb
 *.joblib
+
+# Notebooks
+.ipynb
+.json
