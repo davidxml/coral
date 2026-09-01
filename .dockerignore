@@ -1,0 +1,27 @@
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Training / dev-only code — not needed to serve predictions
+training/
+data/
+
+# Notebooks (build_pipeline.ipynb and evaluate.ipynb live under data/ and training/, already excluded above, but explicit is safer)
+*.ipynb
+
+# Testing/benchmarking scripts, not part of the running service
+load_test.py
+
+# Docs/meta — irrelevant to the running container
+README.md
+LICENSE
+
+# Unused model artifacts — only logistic_regression_model.joblib, tfidf_vectorizer.joblib, threshold.json are actually loaded
+artifacts/models/naive_bayes_model.joblib
+artifacts/models/spam_dense_model.keras
+
+# Version control / env
+.git/
+.gitignore
+.venv/
+venv/
