@@ -19,5 +19,5 @@ env/
 *.joblib
 
 # Notebooks
-.ipynb
+*.ipynb
 .json
