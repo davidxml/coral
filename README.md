@@ -10,7 +10,7 @@
 ![Pydantic](https://img.shields.io/badge/pydantic-validated-E92063?style=flat-square&logo=pydantic&logoColor=white)
 
 ![Accuracy](https://img.shields.io/badge/accuracy-≥97%25-2ea44f?style=flat-square)
-![F1 Score](https://img.shields.io/badge/F1--score-≥95%25-2ea44f?style=flat-square)
+![F1 Score](https://img.shields.io/badge/F1--score-≥94%25-2ea44f?style=flat-square)
 ![Endpoint](https://img.shields.io/badge/endpoint-POST%20%2Fpredict-orange?style=flat-square)
 ![Status](https://img.shields.io/badge/status-active-brightgreen?style=flat-square)
 
