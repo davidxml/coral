@@ -92,3 +92,14 @@ def classify_text(payload: PredictionRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")
+    
+@app.get("/")
+def root():
+    return {
+        "service": "Coral",
+        "description": "ML-powered spam detection API",
+        "status": "operational",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health"
+    }
